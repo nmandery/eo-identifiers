@@ -1,0 +1,559 @@
+//! Sentinel 1
+//!
+//! # Example
+//!
+//! ```rust
+//! use eo_identifiers::identifiers::sentinel1::{Product, Dataset};
+//! use std::str::FromStr;
+//!
+//! assert!(
+//!     Product::from_str("S1A_EW_GRDM_1SDH_20151221T165227_20151221T165332_009143_00D275_8694")
+//!     .is_ok()
+//! );
+//! assert!(
+//!     Dataset::from_str("s1a-iw-grd-vh-20221029t171425-20221029t171450-045660-0575ce-002")
+//!     .is_ok()
+//! );
+//! ```
+//!
+use crate::common_parsers::{parse_esa_timestamp, take_n_digits_in_range};
+use crate::{impl_from_str, Mission};
+use chrono::NaiveDateTime;
+use nom::branch::alt;
+use nom::bytes::complete::{tag, tag_no_case, take_while_m_n};
+use nom::character::complete::char;
+use nom::combinator::map;
+use nom::IResult;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+#[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum MissionId {
+    S1A,
+    S1B,
+}
+
+impl From<MissionId> for Mission {
+    fn from(_: MissionId) -> Self {
+        Mission::Sentinel1
+    }
+}
+
+#[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Mode {
+    IW,
+    EW,
+    WV,
+    S1,
+    S2,
+    S3,
+    S4,
+    S5,
+    S6,
+}
+
+#[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ProductType {
+    RAW,
+    SLC,
+    GRD,
+    OCN,
+}
+
+#[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ResolutionClass {
+    Full,
+    High,
+    Medium,
+    NotApplicable,
+}
+
+#[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ProcessingLevel {
+    Level0,
+    Level1,
+    Level2,
+}
+
+#[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ProductClass {
+    Standard,
+    Annotation,
+}
+
+#[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ProductPolarisation {
+    HH,
+    VV,
+    HHHV,
+    VVVH,
+}
+
+/// Sentinel 1 Product
+///
+/// Based on the [official S1 naming convention](https://sentinel.esa.int/web/sentinel/user-guides/sentinel-1-sar/naming-conventions).
+#[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Product {
+    /// Mission id
+    ///
+    /// # Official description
+    ///
+    /// > The Mission Identifier (MMM) denotes the satellite and will be either
+    /// > S1A for the SENTINEL-1A instrument or S1B for the SENTINEL-1B instrument.
+    pub mission_id: MissionId,
+
+    /// Mode
+    ///
+    /// # Official description
+    ///
+    /// > The Mode/Beam (BB) identifies the S1-S6 beams for SM products and IW, EW and WV for
+    /// > products from the respective modes.
+    pub mode: Mode,
+
+    /// Product Type
+    ///
+    /// # Official description
+    ///
+    /// > Product Type (TTT) can be RAW, SLC, GRD or OCN.
+    pub product_type: ProductType,
+
+    /// Resolution class
+    ///
+    /// # Official description
+    ///
+    /// > Resolution Class (R) can be F (Full resolution), H (High resolution),
+    /// > M (Medium resolution), or _ (underscore: not applicable to the current product type). Resolution Class is used for GRD only.
+    pub resolution_class: ResolutionClass,
+
+    /// Processing level
+    ///
+    /// # Official description
+    ///
+    /// > The Processing Level (L) can be 0, 1 or 2.
+    pub processing_level: ProcessingLevel,
+
+    /// Product class
+    ///
+    /// # Official description
+    ///
+    /// > The Product Class can be Standard (S) or Annotation (A). Annotation products are
+    /// > only used internally by the PDGS and are not distributed.
+    pub product_class: ProductClass,
+
+    /// Polarisation
+    ///
+    /// # Official description
+    ///
+    /// > Polarisation (PP) can be one of:
+    /// > * SH (single HH polarisation)
+    /// > * SV (single VV polarisation)
+    /// > * DH (dual HH+HV polarisation)
+    /// > * DV (dual VV+VH polarisation)
+    pub polarisation: ProductPolarisation,
+
+    /// start datetime
+    pub start_datetime: NaiveDateTime,
+
+    /// stop datetime
+    pub stop_datetime: NaiveDateTime,
+
+    /// Orbit number
+    ///
+    /// # Official description
+    ///
+    /// > The absolute orbit number at product start time (OOOOOO) will be
+    /// > in the range 000001-999999.
+    pub orbit_number: u32,
+
+    /// Data take identifier
+    ///
+    /// # Official description
+    ///
+    /// > The mission data-take identifier (DDDDDD) will be in the range 000001-FFFFFF.
+    pub data_take_identifier: String,
+
+    /// product unique identifier
+    ///
+    /// # Official description
+    ///
+    /// > The product unique identifier (CCCC) is a hexadecimal string generated by
+    /// > computing CRC-16 on the manifest file using CRC-CCITT.
+    pub product_unique_identifier: String,
+    // folder extension is skipped
+}
+
+#[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Hash, Copy)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum SwathIdentifier {
+    S1,
+    S2,
+    S3,
+    S4,
+    S5,
+    S6,
+    IW,
+    IW1,
+    IW2,
+    IW3,
+    EW,
+    EW1,
+    EW2,
+    EW3,
+    EW4,
+    EW5,
+    WV,
+    WV1,
+    WV2,
+}
+
+impl SwathIdentifier {
+    pub fn is_s(&self) -> bool {
+        matches!(
+            self,
+            Self::S1 | Self::S2 | Self::S3 | Self::S4 | Self::S5 | Self::S6
+        )
+    }
+
+    pub fn is_iw(&self) -> bool {
+        matches!(self, Self::IW1 | Self::IW2 | Self::IW3 | Self::IW)
+    }
+
+    pub fn is_ew(&self) -> bool {
+        matches!(self, Self::EW1 | Self::EW2 | Self::EW3 | Self::EW)
+    }
+
+    pub fn is_wv(&self) -> bool {
+        matches!(self, Self::WV1 | Self::WV2 | Self::WV)
+    }
+}
+
+#[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Copy, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum DatasetPolarisation {
+    HH,
+    VV,
+    HV,
+    VH,
+}
+
+/// Sentinel 1 Dataset
+///
+/// Based on the [official S1 naming convention](https://sentinel.esa.int/web/sentinel/user-guides/sentinel-1-sar/naming-conventions).
+#[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Dataset {
+    /// Mission id
+    ///
+    /// # Official description
+    ///
+    /// > The Mission Identifier (MMM) denotes the satellite and will be either
+    /// > S1A for the SENTINEL-1A instrument or S1B for the SENTINEL-1B instrument.
+    pub mission_id: MissionId,
+
+    /// swath identifier
+    ///
+    /// # Official description
+    ///
+    /// > The Swath Identifier (sss) identifies the s1-s6 beams for SM mode,
+    /// > iw1-iw3 for IW mode, ew1-ew5 for EW more and wv1-wv2 for WV mode.
+    pub swath_identifier: SwathIdentifier,
+
+    /// Product Type
+    ///
+    /// # Official description
+    ///
+    /// > Product Type (TTT) can be RAW, SLC, GRD or OCN.
+    pub product_type: ProductType,
+
+    /// Polarisation
+    ///
+    /// # Official description
+    ///
+    /// > Polarisation (PP) can be one of:
+    /// > * hh (single HH polarisation)
+    /// > * vv (single VV polarisation)
+    /// > * hv (single HV polarisation)
+    /// > * vh (single VH polarisation).
+    pub polarisation: DatasetPolarisation,
+
+    /// sensing start datetime
+    pub start_datetime: NaiveDateTime,
+
+    /// sensing top datetime
+    pub stop_datetime: NaiveDateTime,
+
+    /// Orbit number
+    ///
+    /// # Official description
+    ///
+    /// > The absolute orbit number at product start time (OOOOOO) will be
+    /// > in the range 000001-999999.
+    pub orbit_number: u32,
+
+    /// Data take identifier
+    ///
+    /// # Official description
+    ///
+    /// > The mission data-take identifier (DDDDDD) will be in the range 000001-FFFFFF.
+    pub data_take_identifier: String,
+
+    /// image number
+    ///
+    /// # Official description
+    ///
+    /// > The image number (nnn) identifies each individual image. WV
+    /// > vignettes each have their own image number as do each swath and polarization image for SM, IW and EW.
+    pub image_number: u32,
+}
+
+fn is_not_product_sep(c: core::primitive::char) -> bool {
+    c != '_'
+}
+
+fn consume_product_sep(s: &str) -> IResult<&str, core::primitive::char> {
+    char('_')(s)
+}
+
+fn consume_dataset_sep(s: &str) -> IResult<&str, core::primitive::char> {
+    char('-')(s)
+}
+
+fn parse_mission_id(s: &str) -> IResult<&str, MissionId> {
+    alt((
+        map(tag_no_case("s1a"), |_| MissionId::S1A),
+        map(tag_no_case("s1b"), |_| MissionId::S1B),
+    ))(s)
+}
+
+fn parse_mode(s: &str) -> IResult<&str, Mode> {
+    alt((
+        map(tag_no_case("iw"), |_| Mode::IW),
+        map(tag_no_case("ew"), |_| Mode::EW),
+        map(tag_no_case("wv"), |_| Mode::WV),
+        map(tag_no_case("s1"), |_| Mode::S1),
+        map(tag_no_case("s2"), |_| Mode::S2),
+        map(tag_no_case("s3"), |_| Mode::S3),
+        map(tag_no_case("s4"), |_| Mode::S4),
+        map(tag_no_case("s5"), |_| Mode::S5),
+        map(tag_no_case("s6"), |_| Mode::S6),
+    ))(s)
+}
+
+fn parse_product_type(s: &str) -> IResult<&str, ProductType> {
+    alt((
+        map(tag_no_case("grd"), |_| ProductType::GRD),
+        map(tag_no_case("ocn"), |_| ProductType::OCN),
+        map(tag_no_case("raw"), |_| ProductType::RAW),
+        map(tag_no_case("slc"), |_| ProductType::SLC),
+    ))(s)
+}
+
+fn parse_resolution(s: &str) -> IResult<&str, ResolutionClass> {
+    alt((
+        map(tag_no_case("f"), |_| ResolutionClass::Full),
+        map(tag_no_case("h"), |_| ResolutionClass::High),
+        map(tag_no_case("m"), |_| ResolutionClass::Medium),
+        map(tag_no_case("_"), |_| ResolutionClass::NotApplicable),
+    ))(s)
+}
+
+fn parse_processing_level(s: &str) -> IResult<&str, ProcessingLevel> {
+    alt((
+        map(tag("0"), |_| ProcessingLevel::Level0),
+        map(tag("1"), |_| ProcessingLevel::Level1),
+        map(tag("2"), |_| ProcessingLevel::Level2),
+    ))(s)
+}
+
+fn parse_product_class(s: &str) -> IResult<&str, ProductClass> {
+    alt((
+        map(tag_no_case("s"), |_| ProductClass::Standard),
+        map(tag_no_case("a"), |_| ProductClass::Annotation),
+    ))(s)
+}
+
+fn parse_product_polarisation(s: &str) -> IResult<&str, ProductPolarisation> {
+    alt((
+        map(tag_no_case("sh"), |_| ProductPolarisation::HH),
+        map(tag_no_case("sv"), |_| ProductPolarisation::VV),
+        map(tag_no_case("dh"), |_| ProductPolarisation::HHHV),
+        map(tag_no_case("dv"), |_| ProductPolarisation::VVVH),
+    ))(s)
+}
+
+/// nom parser function
+pub fn parse_product(s: &str) -> IResult<&str, Product> {
+    let (s, mission_id) = parse_mission_id(s)?;
+    let (s, _) = consume_product_sep(s)?;
+    let (s, mode) = parse_mode(s)?;
+    let (s, _) = consume_product_sep(s)?;
+    let (s, product_type) = parse_product_type(s)?;
+    let (s, resolution_class) = parse_resolution(s)?;
+    let (s, _) = consume_product_sep(s)?;
+    let (s, processing_level) = parse_processing_level(s)?;
+    let (s, product_class) = parse_product_class(s)?;
+    let (s, polarisation) = parse_product_polarisation(s)?;
+    let (s, _) = consume_product_sep(s)?;
+    let (s, start_datetime) = parse_esa_timestamp(s)?;
+    let (s, _) = consume_product_sep(s)?;
+    let (s, stop_datetime) = parse_esa_timestamp(s)?;
+    let (s, _) = consume_product_sep(s)?;
+    let (s, orbit_number) = take_n_digits_in_range(6, 1..=999999)(s)?;
+    let (s, _) = consume_product_sep(s)?;
+    let (s, data_take_identifier) = take_while_m_n(6, 6, is_not_product_sep)(s)?;
+    let (s, _) = consume_product_sep(s)?;
+    let (s, product_unique_identifier) = take_while_m_n(4, 4, is_not_product_sep)(s)?;
+
+    Ok((
+        s,
+        Product {
+            mission_id,
+            mode,
+            product_type,
+            resolution_class,
+            processing_level,
+            product_class,
+            polarisation,
+            start_datetime,
+            stop_datetime,
+            orbit_number,
+            data_take_identifier: data_take_identifier.to_uppercase(),
+            product_unique_identifier: product_unique_identifier.to_uppercase(),
+        },
+    ))
+}
+
+fn parse_dataset_polarisation(s: &str) -> IResult<&str, DatasetPolarisation> {
+    alt((
+        map(tag_no_case("hh"), |_| DatasetPolarisation::HH),
+        map(tag_no_case("vv"), |_| DatasetPolarisation::VV),
+        map(tag_no_case("hv"), |_| DatasetPolarisation::HV),
+        map(tag_no_case("vh"), |_| DatasetPolarisation::VH),
+    ))(s)
+}
+
+fn parse_swath_identifier(s: &str) -> IResult<&str, SwathIdentifier> {
+    alt((
+        map(tag_no_case("s1"), |_| SwathIdentifier::S1),
+        map(tag_no_case("s2"), |_| SwathIdentifier::S2),
+        map(tag_no_case("s3"), |_| SwathIdentifier::S3),
+        map(tag_no_case("s4"), |_| SwathIdentifier::S4),
+        map(tag_no_case("s5"), |_| SwathIdentifier::S5),
+        map(tag_no_case("s6"), |_| SwathIdentifier::S6),
+        map(tag_no_case("iw1"), |_| SwathIdentifier::IW1),
+        map(tag_no_case("iw2"), |_| SwathIdentifier::IW2),
+        map(tag_no_case("iw3"), |_| SwathIdentifier::IW3),
+        map(tag_no_case("iw"), |_| SwathIdentifier::IW),
+        map(tag_no_case("ew1"), |_| SwathIdentifier::EW1),
+        map(tag_no_case("ew2"), |_| SwathIdentifier::EW2),
+        map(tag_no_case("ew3"), |_| SwathIdentifier::EW3),
+        map(tag_no_case("ew4"), |_| SwathIdentifier::EW4),
+        map(tag_no_case("ew5"), |_| SwathIdentifier::EW5),
+        map(tag_no_case("ew"), |_| SwathIdentifier::EW),
+        map(tag_no_case("wv1"), |_| SwathIdentifier::WV1),
+        map(tag_no_case("wv2"), |_| SwathIdentifier::WV2),
+        map(tag_no_case("wv"), |_| SwathIdentifier::WV),
+    ))(s)
+}
+
+/// nom parser function
+pub fn parse_dataset(s: &str) -> IResult<&str, Dataset> {
+    let (s, mission_id) = parse_mission_id(s)?;
+    let (s, _) = consume_dataset_sep(s)?;
+    let (s, swath_identifier) = parse_swath_identifier(s)?;
+    let (s, _) = consume_dataset_sep(s)?;
+    let (s, product_type) = parse_product_type(s)?;
+    let (s, _) = consume_dataset_sep(s)?;
+    let (s, polarisation) = parse_dataset_polarisation(s)?;
+    let (s, _) = consume_dataset_sep(s)?;
+    let (s, start_datetime) = parse_esa_timestamp(s)?;
+    let (s, _) = consume_dataset_sep(s)?;
+    let (s, stop_datetime) = parse_esa_timestamp(s)?;
+    let (s, _) = consume_dataset_sep(s)?;
+    let (s, orbit_number) = take_n_digits_in_range(6, 1..=999999)(s)?;
+    let (s, _) = consume_dataset_sep(s)?;
+    let (s, data_take_identifier) = take_while_m_n(6, 6, is_not_product_sep)(s)?;
+    let (s, _) = consume_dataset_sep(s)?;
+    let (s, image_number) = take_n_digits_in_range(3, 0..=999)(s)?;
+
+    Ok((
+        s,
+        Dataset {
+            mission_id,
+            swath_identifier,
+            product_type,
+            polarisation,
+            start_datetime,
+            stop_datetime,
+            orbit_number,
+            data_take_identifier: data_take_identifier.to_uppercase(),
+            image_number,
+        },
+    ))
+}
+
+impl_from_str!(parse_dataset, Dataset);
+impl_from_str!(parse_product, Product);
+
+#[cfg(test)]
+mod tests {
+    use crate::identifiers::sentinel1::{
+        parse_dataset, parse_product, DatasetPolarisation, MissionId, Mode, ProcessingLevel,
+        ProductClass, ProductPolarisation, ProductType, ResolutionClass, SwathIdentifier,
+    };
+    use crate::identifiers::tests::apply_to_samples_from_txt;
+
+    #[test]
+    fn parse_s1_product() {
+        let (_, product) =
+            parse_product("S1A_IW_GRDH_1SDV_20200207T051836_20200207T051901_031142_039466_A237")
+                .unwrap();
+        assert_eq!(product.mission_id, MissionId::S1A);
+        assert_eq!(product.mode, Mode::IW);
+        assert_eq!(product.product_type, ProductType::GRD);
+        assert_eq!(product.resolution_class, ResolutionClass::High);
+        assert_eq!(product.processing_level, ProcessingLevel::Level1);
+        assert_eq!(product.product_class, ProductClass::Standard);
+        assert_eq!(product.polarisation, ProductPolarisation::VVVH);
+        // timestamps skipped
+        assert_eq!(product.orbit_number, 31142);
+        assert_eq!(product.data_take_identifier.as_str(), "039466");
+        assert_eq!(product.product_unique_identifier.as_str(), "A237");
+    }
+
+    #[test]
+    fn parse_s1_dataset() {
+        let (_, ds) =
+            parse_dataset("s1a-iw-grd-vh-20221029t171425-20221029t171450-045660-0575ce-002.tiff")
+                .unwrap();
+        assert_eq!(ds.mission_id, MissionId::S1A);
+        assert_eq!(ds.swath_identifier, SwathIdentifier::IW);
+        assert_eq!(ds.product_type, ProductType::GRD);
+        assert_eq!(ds.polarisation, DatasetPolarisation::VH);
+        // timestamps skipped
+        assert_eq!(ds.orbit_number, 45660);
+        assert_eq!(ds.data_take_identifier.as_str(), "0575CE");
+    }
+
+    #[test]
+    fn parse_s1_dataset_no_fileextension() {
+        let (_, _ds) =
+            parse_dataset("s1a-iw-grd-vh-20221029t171425-20221029t171450-045660-0575ce-002")
+                .unwrap();
+    }
+
+    #[test]
+    fn apply_to_product_testdata() {
+        apply_to_samples_from_txt("sentinel1_products.txt", |s| {
+            parse_product(s).unwrap();
+        })
+    }
+}

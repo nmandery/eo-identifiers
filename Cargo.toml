@@ -1,0 +1,20 @@
+[package]
+name = "eo-identifiers"
+version = "0.1.0"
+edition = "2021"
+description = "Parsers for naming conventions of earth observation products and datasets"
+authors = ["Nico Mandery <nico@nmandery.net>"]
+license = "MIT"
+repository = "https://github.com/nmandery/eo-identifiers"
+homepage = "https://github.com/nmandery/eo-identifiers"
+readme = "README.md"
+
+[features]
+serde = ["dep:serde", "chrono/serde"]
+
+[dependencies]
+chrono = "0.4"
+nom = "7"
+num-traits = "0.2"
+serde = { version = "1", features = ["derive"], optional = true }
+thiserror = "1"
