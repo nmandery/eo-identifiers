@@ -118,16 +118,20 @@ fn t_separator(i: &str) -> IResult<&str, ()> {
 }
 
 pub(crate) fn parse_simple_date(s: &str) -> IResult<&str, NaiveDate> {
-    map(tuple((date_year, date_month, date_day)), |(y, m, d)| {
-        NaiveDate::from_ymd(y, m, d)
-    })(s)
+    let (s_out, date_opt) = map(tuple((date_year, date_month, date_day)), |(y, m, d)| {
+        NaiveDate::from_ymd_opt(y, m, d)
+    })(s)?;
+    let date = date_opt.ok_or_else(|| Err::Error(Error::new(s, nom::error::ErrorKind::Fail)))?;
+    Ok((s_out, date))
 }
 
 pub(crate) fn parse_simple_time(s: &str) -> IResult<&str, NaiveTime> {
-    map(
+    let (s_out, time_opt) = map(
         tuple((time_hour, time_minute, time_second)),
-        |(h, mn, s)| NaiveTime::from_hms(h, mn, s),
-    )(s)
+        |(h, mn, s)| NaiveTime::from_hms_opt(h, mn, s),
+    )(s)?;
+    let time = time_opt.ok_or_else(|| Err::Error(Error::new(s, nom::error::ErrorKind::Fail)))?;
+    Ok((s_out, time))
 }
 
 pub(crate) fn parse_esa_timestamp(s: &str) -> IResult<&str, NaiveDateTime> {

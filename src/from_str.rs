@@ -25,7 +25,7 @@ where
     P: Fn(&str) -> IResult<&str, O>,
 {
     move |s: &str| match p(s) {
-        Ok((_, v)) => Ok(v.into()),
+        Ok((_, v)) => Ok(v),
         Err(e) => Err(match e {
             nom::Err::Incomplete(needed) => ParseError::NotEnoughData(match needed {
                 Needed::Unknown => 0,

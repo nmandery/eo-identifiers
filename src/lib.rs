@@ -15,7 +15,10 @@
 //!     assert_eq!(product.product_level, ProductLevel::L1C);
 //!     assert_eq!(
 //!         product.start_datetime,
-//!         NaiveDateTime::new(NaiveDate::from_ymd(2017, 1, 5), NaiveTime::from_hms(1, 34, 42))
+//!         NaiveDateTime::new(
+//!             NaiveDate::from_ymd_opt(2017, 1, 5).unwrap(),
+//!             NaiveTime::from_hms_opt(1, 34, 42).unwrap()
+//!         )
 //!     );
 //!     assert_eq!(product.relative_orbit_number, 31);
 //! }
@@ -149,8 +152,12 @@ impl Identifier {
             Identifier::Sentinel1Dataset(ds) => ds.start_datetime,
             Identifier::Sentinel2Product(p) => p.start_datetime,
             Identifier::Sentinel3Product(p) => p.start_datetime,
-            Identifier::LandsatSceneId(s) => s.acquire_date.and_hms(0, 0, 0),
-            Identifier::LandsatProduct(p) => p.acquire_date.and_hms(0, 0, 0),
+            Identifier::LandsatSceneId(s) => {
+                s.acquire_date.and_hms_opt(0, 0, 0).expect("valid time")
+            }
+            Identifier::LandsatProduct(p) => {
+                p.acquire_date.and_hms_opt(0, 0, 0).expect("valid time")
+            }
         }
     }
 

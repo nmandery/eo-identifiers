@@ -24,6 +24,7 @@ use chrono::{Duration, NaiveDate};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, tag_no_case, take};
 use nom::combinator::{map, opt};
+use nom::error::ErrorKind;
 use nom::sequence::tuple;
 use nom::IResult;
 #[cfg(feature = "serde")]
@@ -128,11 +129,11 @@ impl NameLong for Sensor {
 
 fn parse_julian_date(s: &str) -> IResult<&str, NaiveDate> {
     let (s, year) = date_year(s)?;
-    let (s, day_of_year) = take_n_digits::<i64>(3)(s)?;
-    Ok((
-        s,
-        NaiveDate::from_ymd(year, 1, 1) + Duration::days(day_of_year - 1),
-    ))
+    let (s_out, day_of_year) = take_n_digits::<i64>(3)(s)?;
+    let date = NaiveDate::from_ymd_opt(year, 1, 1)
+        .ok_or_else(|| nom::Err::Error(nom::error::Error::new(s, ErrorKind::Fail)))?
+        + Duration::days(day_of_year - 1);
+    Ok((s_out, date))
 }
 
 /// Landsat scene id
@@ -361,7 +362,7 @@ mod tests {
     #[test]
     fn test_parse_julian_date() {
         let (_, d) = parse_julian_date("2020046").unwrap();
-        assert_eq!(d, NaiveDate::from_ymd(2020, 2, 15));
+        assert_eq!(d, NaiveDate::from_ymd_opt(2020, 2, 15).unwrap());
     }
 
     #[test]
@@ -371,7 +372,10 @@ mod tests {
         assert_eq!(scene.mission, MissionId::Landsat8);
         assert_eq!(scene.wrs_path, 39);
         assert_eq!(scene.wrs_row, 22);
-        assert_eq!(scene.acquire_date, NaiveDate::from_ymd(2013, 3, 17));
+        assert_eq!(
+            scene.acquire_date,
+            NaiveDate::from_ymd_opt(2013, 3, 17).unwrap()
+        );
         assert_eq!(scene.ground_station_identifier.as_str(), "EDC");
         assert_eq!(scene.archive_version_number, 0);
     }
