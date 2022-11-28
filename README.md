@@ -2,7 +2,7 @@ Parsers for naming conventions of earth observation products and datasets
 
 [![Latest Version](https://img.shields.io/crates/v/eo-identifiers.svg)](https://crates.io/crates/eo-identifiers)
 [![Documentation](https://docs.rs/eo-identifiers/badge.svg)](https://docs.rs/eo-identifiers)
-![ci](https://github.com/nmandery/eo-identifiers/workflows/ci/badge.svg)
+![ci](https://github.com/nmandery/eo-identifiers/workflows/CI/badge.svg)
 [![dependency status](https://deps.rs/repo/github/nmandery/eo-identifiers/status.svg)](https://deps.rs/repo/github/nmandery/eo-identifiers)
 
 ```rust
