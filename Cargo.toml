@@ -1,6 +1,6 @@
 [package]
 name = "eo-identifiers"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Parsers for naming conventions of earth observation products and datasets"
 authors = ["Nico Mandery <nico@nmandery.net>"]
