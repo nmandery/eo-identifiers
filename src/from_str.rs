@@ -41,7 +41,7 @@ where
 macro_rules! impl_from_str {
     ($parser_fn:ident, $out:ty) => {
         impl std::str::FromStr for $out {
-            type Err = crate::ParseError;
+            type Err = $crate::ParseError;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 crate::from_str::map_parser($parser_fn)(s).map(|v| v.into())
